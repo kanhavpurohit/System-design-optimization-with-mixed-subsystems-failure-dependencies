@@ -41,7 +41,8 @@ def optimize_de(m, sys_type, As_min, pop_size=100, max_gen=200, track_history=Fa
     n_vars, r_vars = decode_solution(best_x, m)
     return n_vars, r_vars, history
 
-def optimize_shade(m, sys_type, As_min, pop_size=100, max_gen=200, track_history=False):
+def optimize_shade(m, sys_type, As_min, pop_size=100, max_gen=200, track_history=False,
+                   objective=None):
     """
     SHADE — Success-History based Adaptive Differential Evolution
     (Tanabe & Fukunaga, IEEE CEC 2013).
@@ -52,13 +53,20 @@ def optimize_shade(m, sys_type, As_min, pop_size=100, max_gen=200, track_history
         offspring, weighted by how much they improved the objective.
       * Mutation is current-to-pbest/1 with an external archive of replaced
         parents, which preserves diversity and avoids premature convergence.
+
+    `objective`: optional fitness function f(x) -> float to minimise. Defaults
+    to the steady-state penalised objective; pass a mission-time objective to
+    optimise for a finite horizon (see backend.transient).
     """
+    obj = objective if objective is not None else (
+        lambda z: penalised_objective(z, m, sys_type, As_min))
+
     dim    = m * 2
     bounds = np.array([[1, 8]] * dim, dtype=float)
     lo, hi = bounds[:, 0], bounds[:, 1]
 
     pop     = np.random.uniform(lo, hi, (pop_size, dim))
-    fitness = np.array([penalised_objective(ind, m, sys_type, As_min) for ind in pop])
+    fitness = np.array([obj(ind) for ind in pop])
 
     best_idx = np.argmin(fitness)
     best_x   = pop[best_idx].copy()
@@ -109,7 +117,7 @@ def optimize_shade(m, sys_type, As_min, pop_size=100, max_gen=200, track_history
             cross[np.random.randint(dim)] = True   # ensure ≥1 gene from the mutant
             trial = np.where(cross, mutant, pop[i])
 
-            trial_fit = penalised_objective(trial, m, sys_type, As_min)
+            trial_fit = obj(trial)
 
             if trial_fit < fitness[i]:
                 archive.append(pop[i].copy())      # replaced parent -> archive
